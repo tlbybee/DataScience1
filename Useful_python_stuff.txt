@@ -1,0 +1,104 @@
+###standard packages
+import pandas as pd
+import numpy as np
+import matplotlib
+import matplotlib.pyplot as plt
+%matplotlib inline  
+
+###show more columns in pandas
+pd.set_option('display.height', 1000)
+pd.set_option('display.max_rows', 500)
+pd.set_option('display.max_columns', 500)
+pd.set_option('display.width', 1000)
+#or
+pd.options.display.max_columns = 150
+
+###Show multiple outputs from a notebook without a bunch of print() statements
+from IPython.core.interactiveshell import InteractiveShell
+InteractiveShell.ast_node_interactivity = "all"
+>>>1+1
+>>>2+2
+2
+4
+
+###unique values in a dataframe
+df.<column>.unique()  #unique values
+df.<column>.nunique()  # number of unique values
+
+###drop rows which contain NaN values in a column
+df.dropna(subset=['RUNTIME_SECONDS'],)
+
+
+###one hot encoding
+#for simple experiment, use dummy variables
+df2 = pd.concat([df2, pd.get_dummies(df2_copy['payment_method_id'],prefix='pay_id')],axis=1)
+df2.drop(['payment_method_id'],axis=1, inplace=True)
+
+#for pipeline, train one-hot encoder, and use one for each column
+from sklearn.preprocessing import OneHotEncoder
+enc = OneHotEncoder(handle_unknown='ignore')
+enc.fit(X)
+X_enc = enc.transform(X)
+orginal = enc.inverse_transform(X_enc)
+#get encoded feature names
+enc.get_feature_names()
+
+###Scaling numeric features
+scaler = MinMaxScaler()
+df2.plan_list_price = scaler.fit_transform(df2_copy.plan_list_price.values.reshape(-1,1))
+
+###datetime stuff
+https://docs.python.org/3/library/datetime.html#strftime-strptime-behavior 
+#convert strings to date time objects, subtract them, and return the number of seconds between events
+(datetime.strptime(programs_df.actual_completion_date[1], '%Y-%m-%d %H:%M:%S') -datetime.strptime(programs_df.actual_start_date[1], '%Y-%m-%d %H:%M:%S')).total_seconds()
+
+###pick out the greatest of each thing from a dataframe:
+#group by msno, and select the msno with the greatest(most recent) transaction_date
+df.loc[df.reset_index().groupby(['msno'])['transaction_date'].idxmax()]
+
+###graphing performance of neural network, history2 is the output of model.fit()
+# summarize history for sensitivity
+plt.figure(figsize=(15,7))
+plt.plot(history1.history['sensitivity'])
+plt.plot(history1.history['val_sensitivity'])
+plt.plot(history2.history['sensitivity'])
+plt.plot(history2.history['val_sensitivity'])
+plt.title('model sensitivity/TPR/recall')
+plt.ylabel('sensitivity')
+plt.xlabel('epoch')
+plt.legend(['m1 train', 'm1 validation', 'm2 train', 'm2 validation'], loc='lower right')
+plt.show()
+plt.savefig('TPR_comparison.png', bbox_inches='tight')
+
+# summarize history for specificity
+plt.figure(figsize=(15,7))
+plt.plot(history1.history['specificity'])
+plt.plot(history1.history['val_specificity'])
+plt.plot(history2.history['specificity'])
+plt.plot(history2.history['val_specificity'])
+plt.title('model specificity/TNR')
+plt.ylabel('specificity')
+plt.xlabel('epoch')
+plt.legend(['m1 train', 'm1 validation', 'm2 train', 'm2 validation'], loc='lower right')
+plt.show()
+plt.savefig('TNR_comparison.png', bbox_inches='tight')
+
+# summarize history for loss
+plt.figure(figsize=(15,7))
+plt.plot(history1.history['loss'])
+plt.plot(history1.history['val_loss'])
+plt.plot(history2.history['loss'])
+plt.plot(history2.history['val_loss'])
+plt.title('model loss')
+plt.ylabel('loss')
+plt.xlabel('epoch')
+plt.legend(['m1 train', 'm1 validation', 'm2 train', 'm2 validation'], loc='upper right')
+plt.show()
+plt.savefig('loss_comparison.png', bbox_inches='tight')
+
+#set multiple indexes
+df.set_index(['a','b','c'])
+
+#stack or melt?
+# https://pandas.pydata.org/pandas-docs/stable/reference/api/pandas.DataFrame.stack.html
+#
