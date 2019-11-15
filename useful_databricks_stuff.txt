@@ -1,0 +1,251 @@
+###magic commands:
+%python - Allows you to execute Python code in the cell.
+%r - Allows you to execute R code in the cell.
+%scala - Allows you to execute Scala code in the cell.
+%sql - Allows you to execute SQL statements in the cell.
+%sh - Allows you to execute Bash Shell commmands and code in the cell.
+%fs - Allows you to execute Databricks Filesystem commands in the cell.
+%md - Allows you to render Markdown syntax as formatted content in the cell.
+%run - Allows you to run another notebook from a cell in the current notebook.
+
+https://spark.apache.org/docs/latest/api/scala/index.html#org.apache.spark.sql.functions$
+
+###make SPARK df
+# spark.(set of numbers).toDF(column name)
+df = spark.range(1000).toDF("number")
+
+###access columns
+df["column name"]
+df.columns
+df.schema
+
+###instead of head() use .show(#)
+df.show(15)
+df.select("column name").show(15)
+
+
+###use sql-like queries
+##query won't be invoked until .show() or .count() because of lazy execution
+#.where("column name > 10 and column name < 14).show()
+df.where("number > 10 and number <15).show()
+
+###take random sample of df
+seed = 10
+withReplacement = False
+fraction = 0.02
+df.sample(withReplacement, fraction, seed).show(100)
+
+
+###if you want to use pandas pd dataframes, use
+pdf = df.toPandas()
+#might need to 
+import pandas as pd
+import numpy as np
+
+
+###create a table and database in databricks
+%sql
+CREATE DATABASE IF NOT EXISTS Databricks;
+USE Databricks;
+CREATE TABLE IF NOT EXISTS AirlineFlight
+USING CSV
+OPTIONS (
+  header="true",
+  delimiter=",",
+  inferSchema="true",
+  path="dbfs:/mnt/training/asa/flights/small.csv"
+);
+CACHE TABLE AirlineFlight;
+SELECT * FROM AirlineFlight;
+
+
+###SQL vs Spark Dataframes 
+SQL										DataFrame (Python)
+SELECT col_1 FROM myTable				df.select(col("col_1"))
+DESCRIBE myTable						df.printSchema()
+SELECT * FROM myTable WHERE col_1 > 0	df.filter(col("col_1") > 0)
+..GROUP BY col_2						..groupBy(col("col_2"))
+..ORDER BY col_2						..orderBy(col("col_2"))
+..WHERE year(col_3) > 1990				..filter(year(col("col_3")) > 1990)
+SELECT * FROM myTable LIMIT 10			df.limit(10)
+display(myTable) (text format)			df.show()
+display(myTable) (html format)			display(df)
+
+
+### Create a view from python that can be used with SQL
+peopleDF.createOrReplaceTempView("People10M")
+
+###spark sql
+display(spark.sql("SELECT * FROM  People10M where firstName = 'Donna' "))
+
+###example of python sql
+(peopleDF 
+  .select(year("birthDate").alias("birthYear"), "firstName") 
+  .filter((col("firstName") == 'Donna') | (col("firstName") == 'Dorothy')) 
+  .filter("gender == 'F' ") 
+  .filter(year("birthDate") > 1990) 
+  .orderBy("birthYear") 
+  .groupBy("birthYear", "firstName") 
+  .count()
+)
+
+###select multiple things
+salaryDF = peopleDF.select(max("salary").alias("max"), min("salary").alias("min"), round(avg("salary")).alias("averageSalary"))
+
+
+###joins merges
+#df1.join(df2, key)  #or key == key
+joinedDF = peopleDistinctNamesDF.join(ssaDistinctNamesDF, col("firstName") == col("ssaFirstName"))
+peopleWithFixedSalariesSortedDF = peopleWithFixedSalariesDF.limit(20).sort('salary', ascending = True)
+
+###testing in databricks
+#dbTest("name of test", correct result, actual result)
+
+
+###user defined functions
+##state type in lambda to make sure output type is right
+from pyspark.sql.types import DoubleType,IntegerType
+import pyspark.sql.functions as f
+posSalary = f.udf(lambda sal: 1 if sal < 0 else sal, DoubleType())
+peopleWithFixedSalariesDF = peopleDF.withColumn('salary', posSalary(peopleDF.salary))
+
+fun = f.udf(lambda sal: f.round(sal / 10000, IntegerType()))
+peopleWithFixedSalaries20KDF = peopleWithFixedSalariesDF.where(peopleWithFixedSalariesDF.salary >= 20000 ).withColumn('salary10k', f.round(peopleWithFixedSalariesDF.salary /10000))
+
+###dates are weird
+carensDF = peopleDF.where(peopleDF.gender == 'F').where(peopleDF.firstName == 'Caren').where(peopleDF.birthDate < '01/03/1980')
+
+###because of tables being schema on read, they won't have a schema when first created, so you have to use
+%sql
+MSCK REPAIR TABLE table_name
+#before this is used, queries on your table might not work 
+
+
+###databricks delta stuff
+##notation:
+## CREATE TABLE
+## USING DELTA
+## LOCATION
+spark.sql("""
+  DROP TABLE IF EXISTS customer_data_delta
+""")
+spark.sql("""
+  CREATE TABLE customer_data_delta 
+  USING DELTA 
+  LOCATION '{}' 
+""".format(deltaDataPath))
+
+###Metadata is displayed through 
+DESCRIBE DETAIL <tableName>.
+
+
+###reading data into new tablefrom pyspark.sql.types import IntegerType
+from pyspark.sql.functions import col
+rawDataDF = (spark.read 
+  .option("inferSchema", "true") 
+  .option("header", "true")
+  .csv(inputPath) 
+  .withColumn("InvoiceNo", col("InvoiceNo").cast(IntegerType()))
+)
+
+### write to generic dataset
+rawDataDF.write.mode("overwrite").format("parquet").partitionBy("Country").save(genericDataPath)
+### write to delta dataset                ###### 
+rawDataDF.write.mode("overwrite").format("delta").partitionBy("Country").save(deltaDataPath)
+
+###Write in 
+(backfillDF
+ .write
+ .mode("overwrite")
+ .format('delta')
+ .partitionBy("Country")
+ .save(backfillDataPath)
+)
+spark.sql("""
+   DROP TABLE IF EXISTS backfill_data_delta
+ """)
+spark.sql("""
+   CREATE TABLE backfill_data_delta 
+   USING DELTA
+   LOCATION 'backfillDataPath' 
+""".format(deltaDataPath))
+
+
+from pyspark.sql.functions import col
+newDataDF = (spark       
+  .read                                              # Read a DataFrame from storage
+  .option("inferSchema","true")                      # Infer schema
+  .option("header","true")                           # File has a header
+  .csv(miniDataInputPath)                                    # Path to file
+  .withColumn("StockCode", col('StockCode').cast("String")) 
+)
+
+# TODO
+from pyspark.sql.functions import expr, col, from_unixtime
+streamingEventPath = "/mnt/training/structured-streaming/events/"
+
+rawDataDF = (spark
+ .read 
+ .option('inferSchema','true')
+ .option('header','true')
+ .json(streamingEventPath)
+ .withColumn('date',from_unixtime(col("time").cast('String'),'MM/dd/yyyy').cast("date"))
+ .withColumn('deviceId', expr("cast(rand(5) * 100 as int)"))
+ .repartition(200)
+)
+
+
+(rawDataDF
+ .write
+ .mode("overwrite")
+ .format("delta")
+ .partitionBy('date')
+ .save('/delta/iot-pipeline/')
+)
+
+spark.sql("""
+   DROP TABLE IF EXISTS demo_iot_data_delta
+ """)
+spark.sql("""
+   CREATE TABLE demo_iot_data_delta
+   USING DELTA
+   LOCATION '/delta/iot-pipeline/'
+""".format(deltaIotPath))
+
+
+#####Cleaning data
+###many types of gas, some of them mean the same thing, or are misspelled/capitalized. use df.replace()
+df_cleaned_fueltype = df_typed.na.replace(["Diesel","Petrol","CompressedNaturalGas","methane","CNG"],["diesel","petrol","cng","cng","cng"],"FuelType")
+display(df_cleaned_fueltype.select("FuelType").distinct())
+
+
+###Drop null values   df.na.drop()
+df_cleaned_of_nulls = df_cleaned_fueltype.na.drop("any",subset=["Price", "Age", "KM"])
+display(df_cleaned_of_nulls.describe())
+
+
+###Collect data on one node for sklearn ml
+X = df_affordability.select("Age", "KM").toPandas().values
+y = df_affordability.select("Affordable").toPandas().values
+
+
+###ETL Pipeline
+Code														Stage
+logDF = (spark												Extract
+    .read													Extract
+    .option("header", True)									Extract
+    .csv()													Extract
+)															Extract
+serverErrorDF = (logDF										Transform
+    .filter((col("code") >= 500) & (col("code") < 600))		Transform
+    .select("date", "time", "extention", "code")			Transform
+)															Transform
+(serverErrorDF.write										Load
+    .parquet())												Load
+
+
+
+
+
+
+
