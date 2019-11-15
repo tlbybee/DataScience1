@@ -102,3 +102,17 @@ df.set_index(['a','b','c'])
 #stack or melt?
 # https://pandas.pydata.org/pandas-docs/stable/reference/api/pandas.DataFrame.stack.html
 #
+
+# sort/order dataframe
+df.sort_values(by="saleprice", axis=0,ascending=True, inplace=False, kind='quicksort',na_position='last')
+
+###make fig and ax, which have bins as a variable
+fig, ax = plt.subplots()
+bins= np.arange(0, 250000, 5000)
+pdf['KM'].plot(kind='hist')
+#print(bins)
+display(fig)
+
+###format strings, so that you can include variables in them
+x = 'hard drive'
+"{} already unmounted {}".format(x,57)
